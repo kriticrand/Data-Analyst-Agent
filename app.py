@@ -49,10 +49,63 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="TDS Data Analyst Agent")
 from fastapi import Request
+def plot_to_base64(fig, max_bytes=100000):
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png', bbox_inches='tight', dpi=100)
+    plt.close(fig)
+    buf.seek(0)
+    image = buf.getvalue()
+    # Optional size reduction loop omitted for brevity
+    return base64.b64encode(image).decode('ascii')
 
 @app.post("/")
-async def handle_post_root(request: Request):
-    return JSONResponse({"message": "POST at root received!"})
+async def analyze_network(request: Request):
+    try:
+        data = await request.json()
+        edges = data.get("edges")
+        if not edges or not isinstance(edges, list):
+            raise HTTPException(400, "Missing or invalid 'edges' in request body")
+
+        G = nx.Graph()
+        G.add_edges_from(edges)
+
+        edge_count = G.number_of_edges()
+        degrees = dict(G.degree())
+        highest_degree_node = max(degrees, key=degrees.get) if degrees else None
+        average_degree = sum(degrees.values()) / len(degrees) if degrees else 0.0
+        density = nx.density(G)
+
+        try:
+            shortest_path_alice_eve = nx.shortest_path_length(G, "Alice", "Eve")
+        except Exception:
+            shortest_path_alice_eve = -1
+
+        fig1 = plt.figure(figsize=(5,5))
+        pos = nx.spring_layout(G)
+        nx.draw(G, pos, with_labels=True, node_color='skyblue', edge_color='gray', node_size=700)
+        network_graph_b64 = plot_to_base64(fig1)
+
+        fig2 = plt.figure()
+        plt.bar(list(degrees.keys()), list(degrees.values()), color='green')
+        plt.xlabel('Node')
+        plt.ylabel('Degree')
+        plt.title('Degree Histogram')
+        degree_histogram_b64 = plot_to_base64(fig2)
+
+        return JSONResponse({
+            "edge_count": edge_count,
+            "highest_degree_node": highest_degree_node,
+            "average_degree": average_degree,
+            "density": density,
+            "shortest_path_alice_eve": shortest_path_alice_eve,
+            "network_graph": network_graph_b64,
+            "degree_histogram": degree_histogram_b64
+        })
+
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
 
 # -------------------- Robust Gemini LLM with fallback --------------------
 from collections import defaultdict
