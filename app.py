@@ -59,53 +59,25 @@ def plot_to_base64(fig, max_bytes=100000):
     return base64.b64encode(image).decode('ascii')
 
 @app.post("/")
-async def analyze_network(request: Request):
+
+async def universal_analyze(request: Request):
     try:
-        data = await request.json()
-        edges = data.get("edges")
-        if not edges or not isinstance(edges, list):
-            raise HTTPException(400, "Missing or invalid 'edges' in request body")
-
-        G = nx.Graph()
-        G.add_edges_from(edges)
-
-        edge_count = G.number_of_edges()
-        degrees = dict(G.degree())
-        highest_degree_node = max(degrees, key=degrees.get) if degrees else None
-        average_degree = sum(degrees.values()) / len(degrees) if degrees else 0.0
-        density = nx.density(G)
-
-        try:
-            shortest_path_alice_eve = nx.shortest_path_length(G, "Alice", "Eve")
-        except Exception:
-            shortest_path_alice_eve = -1
-
-        fig1 = plt.figure(figsize=(5,5))
-        pos = nx.spring_layout(G)
-        nx.draw(G, pos, with_labels=True, node_color='skyblue', edge_color='gray', node_size=700)
-        network_graph_b64 = plot_to_base64(fig1)
-
-        fig2 = plt.figure()
-        plt.bar(list(degrees.keys()), list(degrees.values()), color='green')
-        plt.xlabel('Node')
-        plt.ylabel('Degree')
-        plt.title('Degree Histogram')
-        degree_histogram_b64 = plot_to_base64(fig2)
-
-        return JSONResponse({
-            "edge_count": edge_count,
-            "highest_degree_node": highest_degree_node,
-            "average_degree": average_degree,
-            "density": density,
-            "shortest_path_alice_eve": shortest_path_alice_eve,
-            "network_graph": network_graph_b64,
-            "degree_histogram": degree_histogram_b64
-        })
-
+        payload = await request.json()
+        # Assuming run_agent or equivalent is your universal evaluation function
+        result = await run_agent_safely_unified(payload)  # Or adapt if sync
+        if "error" in result:
+            raise HTTPException(status_code=500, detail=result["error"])
+        return JSONResponse(result)
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
-
+@app.get("/", response_class=HTMLResponse)
+async def serve_frontend():
+    try:
+        with open("index.html", "r", encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        return HTMLResponse(content="<h1>Frontend not found</h1><p>Please ensure index.html is in the same directory as app.py</p>", status_code=404)
 
 # -------------------- Robust Gemini LLM with fallback --------------------
 from collections import defaultdict
