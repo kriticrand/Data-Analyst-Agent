@@ -48,6 +48,11 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="TDS Data Analyst Agent")
+from fastapi import Request
+
+@app.post("/")
+async def handle_post_root(request: Request):
+    return JSONResponse({"message": "POST at root received!"})
 
 # -------------------- Robust Gemini LLM with fallback --------------------
 from collections import defaultdict
